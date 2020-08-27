@@ -1,11 +1,18 @@
 <?php
 
+//this calls our composer dependencies for the guzzle session
+use GuzzleHttp\Client;
+use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Handler\CurlHandler;
+use GuzzleHttp\Middleware;
 
-
-function login ($username, $password)
+function login ($api_url, $api_username, $api_password)
 	{
 	try 
-		{		
+		{
+		$client = new Client(['verify' => false]);		
 		$response = $client->post($api_url.'/api/login', 
 			[
 			'form_params' => 
@@ -38,35 +45,47 @@ function login ($username, $password)
 		}
 	}
 	
-function updatePhoto ($apiToken, $id, $title, $description, $takenAt, $imagePath, $imageFileType )
+function updatePhoto ($api_url, $api_token, $id, $title, $description, $taken_at, $image_path, $image_ext )
 	{
 	try 
-		{		
+		{
+		// Create a middleware that echoes parts of the request if we need to test it.
+		$tapMiddleware = Middleware::tap(function ($request) 
+			{
+			//dump out the headers
+			var_dump($request->getHeaders());
+			//and the body
+			echo $request->getBody();						
+			});	
+						
+		$client = new Client(['verify' => false]);
+		// Grab the client's handler instance.
+		$clientHandler = $client->getConfig('handler');
+			
 		$response = $client->put($api_url.'/api/photos/'.$id, 
 			[
 			'json' => 
-				[ 
-				'id' => $id,	
+				[
 				'title' => $title,
 				'description' => $description,
-				'url' => (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]/uploads/".rawurlencode($imagePath),
-				'taken_at' => 	$takenAt,
-				'image_ext' => 	$imageFileType
+				'url' => $image_path,
+				'taken_at' => 	$taken_at,
+				'image_ext' => 	$image_ext
 				],
 			'headers' => 
 				[
 				'Content-Type' => 'application/json',
 				'Accept' => 'application/json',
-				'Authorization' => 'Bearer '.$apiToken
+				'Authorization' => 'Bearer '.$api_token
 				]
 			//This handler is called if we want to see what guzzler is posting	
 			//	,'handler' => $tapMiddleware($clientHandler)
 			]);	
-		if ($response->getStatusCode() == 201)
+		if ($response->getStatusCode() == 200)
 			{
 			//convert the json to an object
 			$someObject = json_decode($response->getBody());
-			if (isset($someObject->data->id))
+			if (isset($someObject->id))
 				{
 				return "SUCCESS: The image was updated";
 				}
@@ -86,25 +105,39 @@ function updatePhoto ($apiToken, $id, $title, $description, $takenAt, $imagePath
 		}
 	}
 	
-function insertPhoto ($apiToken, $title, $description, $takenAt, $imagePath, $imageFileType )
+function insertPhoto ($api_url, $api_token, $title, $description, $taken_at, $image_path, $image_ext )
 	{
 	try 
-		{		
-		$response = $client->post($api_url.'/api/photos/', 
+		{
+		// Create a middleware that echoes parts of the request if we need to test it.
+		$tapMiddleware = Middleware::tap(function ($request) 
+			{
+			//dump out the headers
+			var_dump($request->getHeaders());
+			//and the body
+			echo $request->getBody();						
+			});		
+			
+		$client = new Client(['verify' => false]);			
+		
+		// Grab the client's handler instance.
+		$clientHandler = $client->getConfig('handler');
+		
+		$response = $client->post($api_url.'/api/photos', 
 			[
 			'json' => 
 				[ 				
 				'title' => $title,
 				'description' => $description,
-				'url' => (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]/uploads/".rawurlencode($imagePath),
-				'taken_at' => 	$takenAt,
-				'image_ext' => 	$imageFileType
+				'url' => $image_path,
+				'taken_at' => 	$taken_at,
+				'image_ext' => 	$image_ext
 				],
 			'headers' => 
 				[
 				'Content-Type' => 'application/json',
 				'Accept' => 'application/json',
-				'Authorization' => 'Bearer '.$apiToken
+				'Authorization' => 'Bearer '.$api_token
 				]
 			//This handler is called if we want to see what guzzler is posting	
 			//	,'handler' => $tapMiddleware($clientHandler)
@@ -113,12 +146,13 @@ function insertPhoto ($apiToken, $title, $description, $takenAt, $imagePath, $im
 			{
 			//convert the json to an object
 			$someObject = json_decode($response->getBody());
-			if (isset($someObject->data->id))
-				{
+			if (isset($someObject->id))
+				{				
 				return "SUCCESS: The image was updated";
 				}
 			else
 				{
+				echo $response->getBody();
 				return "ERROR: The image was NOT updated";
 				}
 			}
@@ -132,3 +166,43 @@ function insertPhoto ($apiToken, $title, $description, $takenAt, $imagePath, $im
 		return "ERROR:{$e}";
 		}
 	}
+	
+function getPhoto ($api_url, $api_token, $id)
+	{	
+	try 
+		{	
+		$client = new Client(['verify' => false]);	
+		$response = $client->get($api_url.'/api/photos/'.$id, 
+			[						
+			'headers' => 
+				[
+				'Content-Type' => 'application/json',
+				'Accept' => 'application/json',
+				'Authorization' => 'Bearer '.$api_token
+				]
+			]);
+		if ($response->getStatusCode() == 200)
+			{
+			
+			$photo = new Photo();
+			//convert the json to an object
+			$someObject = json_decode($response->getBody());
+			$photo->id = $someObject->id;
+			$photo->title = $someObject->title;
+			$photo->description = $someObject->description;
+			$photo->taken_at = $someObject->taken_at;
+			$photo->image_ext = $someObject->image_ext;
+			
+			return $photo;
+			}
+		else
+			{
+			return "ERROR:{$response->getBody()}";
+			}
+		}
+	catch (GuzzleHttp\Exception\ClientException $e) 
+		{		
+		return "ERROR:{$e}";
+		}
+	}
+	

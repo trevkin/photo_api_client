@@ -16,11 +16,9 @@ use GuzzleHttp\Middleware;
 //we set the page title and include the header file	 with the css links
 $page_title = "View Listing";
 include "layout_header.php";
+include "functions.php";
 
-
-?>
-
-	<div class="container">
+?><div class="container">
     <table class='table table-hover table-responsive table-bordered'>
    <tr>
    		<td>Image</td>
@@ -31,27 +29,18 @@ include "layout_header.php";
         <td></td>
 	</tr> <?php
 	
-	
-	
-	$client = new Client(['verify' => false]);
-			
-$response = $client->post($api_url.'/api/login', 
-	[
-	'form_params' => 
-		[
-		'email' => $api_username,
-		'password' => $api_password
-		]
-	]);
-if ($response->getStatusCode() == 200)
+//login to the API and get api key for our subsequent api calls
+$api_token = login($api_url, $api_username, $api_password);
+
+//the api_token will be prefixed with ERROR if login failed so check for that before proceding
+if (strpos($api_token, 'ERROR') !== true)
 	{
-	//convert the json to an object
-	$someObject = json_decode($response->getBody());
-	if (isset($someObject->data->api_token))
+	$client = new Client(['verify' => false]);
+	
+	//if delete_id is in request, call delete function
+	if (isset($_REQUEST["delete_id"]))
 		{
-		$api_token = $someObject->data->api_token;	
-		
-		$response = $client->get($api_url.'/api/photos', 
+		$response = $client->delete($api_url.'/api/photos/'.$_REQUEST["delete_id"], 
 			[			
 			'headers' => 
 				[
@@ -60,38 +49,52 @@ if ($response->getStatusCode() == 200)
 				'Authorization' => 'Bearer '.$api_token
 				]
 			]);
-		if ($response->getStatusCode() == 200)
+		if ($response->getStatusCode() == 204)
 			{
-			//convert the json to an object
-			$listingArray = json_decode($response->getBody(), true);
-			
-			//var_dump($listingArray);// $response->getBody();
-			//echo $listingArray[0]["id"];
-			$leftOrRight = "fadeInLeft";
-			for($i=0;$i< count($listingArray);$i++) 
+			echo "<div class='alert alert-success'>Photo deleted</div>";
+			}			
+		}
+	$response = $client->get($api_url.'/api/photos', 
+		[			
+		'headers' => 
+			[
+			'Content-Type' => 'application/json',
+			'Accept' => 'application/json',
+			'Authorization' => 'Bearer '.$api_token
+			]
+		]);
+	if ($response->getStatusCode() == 200)
+		{
+		//convert the json to an object
+		$listingArray = json_decode($response->getBody(), true);
+		
+		//var_dump($listingArray);// $response->getBody();
+		//echo $listingArray[0]["id"];
+		$leftOrRight = "fadeInLeft";
+		for($i=0;$i< count($listingArray);$i++) 
+			{
+			//bitwise test for an odd number
+			if (($i & 1)==0)
 				{
-				//bitwise test for an odd number
-				if (($i & 1)==0)
-					{
-					$leftOrRight  = "fadeInLeft";	
-					}
-				else
-					{
-					$leftOrRight  = "fadeInRight";	
-					}
+				$leftOrRight  = "fadeInLeft";	
+				}
+			else
+				{
+				$leftOrRight  = "fadeInRight";	
+				}
 ?> <tr>
-   		<td><img src="http://<?=$api_url?>/storage/<?=$listingArray[$i]["id"]?>.<?=$listingArray[$i]["image_ext"]?>" alt="<?=$listingArray[$i]["title"]?>"  width="200"></td>
+   		<td><img src="http://<?=$api_url?>/storage/<?=$listingArray[$i]["id"]?>.<?=$listingArray[$i]["image_ext"]?>?time=<?=time()?>" alt="<?=$listingArray[$i]["title"]?>"  width="200"></td>
 		<td><?=$listingArray[$i]["title"]?></td>
 		<td><?=$listingArray[$i]["description"]?></td>
         <td><?=date('d F Y h:mA', strtotime($listingArray[$i]["taken_at"]))?></td>
-        <td><a href="http://<?=$api_url?>/api/photos/<?=$listingArray[$i]["id"]?>">Edit</a></td>
-        <td><a href="">Delete</a></td>
+        <td><a href="index.php?id=<?=$listingArray[$i]["id"]?>">Edit</a></td>
+        <td><a href="#" data-href="listing.php?delete_id=<?=$listingArray[$i]["id"]?>" data-toggle="modal" data-target="#confirm-delete">Delete</a></td>
 	</tr>
 <?php	
-				}
 			}
 		}
 	}
+
 ?>
 	</table>
     </div>
